@@ -223,6 +223,13 @@ button {
   font-weight: 700;
 }
 
+.form-message {
+  min-height: 1.25rem;
+  margin: 0;
+  color: var(--red);
+  font-weight: 700;
+}
+
 .login-actions {
   display: flex;
   gap: 10px;
@@ -424,7 +431,7 @@ textarea:focus {
 }
 
 .account-form {
-  grid-template-columns: 1fr 1fr 180px 160px 170px;
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) 170px 150px 130px 170px;
 }
 
 .account-card,

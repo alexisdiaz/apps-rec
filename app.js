@@ -2,8 +2,8 @@ const STORAGE_KEY = "shared-entertainment-control";
 
 const seedData = {
   accounts: [
-    { id: crypto.randomUUID(), service: "Spotify", name: "Cuenta 1", country: "El Salvador", cost: 12.99 },
-    { id: crypto.randomUUID(), service: "Disney+", name: "Cuenta familiar", country: "Estados Unidos", cost: 13.99 },
+    { id: crypto.randomUUID(), service: "Spotify", name: "Cuenta 1", country: "El Salvador", cost: 12.99, payDay: 1 },
+    { id: crypto.randomUUID(), service: "Disney+", name: "Cuenta familiar", country: "Estados Unidos", cost: 13.99, payDay: 15 },
   ],
   people: [],
 };
@@ -29,6 +29,8 @@ const els = {
   accountForm: document.querySelector("#accountForm"),
   personForm: document.querySelector("#personForm"),
   personModal: document.querySelector("#personModal"),
+  personFormMessage: document.querySelector("#personFormMessage"),
+  personSubmitButton: document.querySelector("#personSubmitButton"),
   searchInput: document.querySelector("#searchInput"),
   statusFilter: document.querySelector("#statusFilter"),
   loginView: document.querySelector("#loginView"),
@@ -57,6 +59,7 @@ els.navTabs.forEach((tab) => {
 
 els.accountForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  setFormBusy(els.accountForm, true);
   const id = document.querySelector("#accountId").value || crypto.randomUUID();
   const existing = state.accounts.find((account) => account.id === id);
   const payload = {
@@ -65,24 +68,33 @@ els.accountForm.addEventListener("submit", async (event) => {
     name: document.querySelector("#accountName").value.trim(),
     country: document.querySelector("#accountCountry").value.trim(),
     cost: Number(document.querySelector("#accountCost").value || 0),
+    payDay: clampPayDay(Number(document.querySelector("#accountPayDay").value)),
   };
 
-  if (db) {
-    await upsertAccount(payload);
-    state = await loadState();
-  } else {
-    if (existing) Object.assign(existing, payload);
-    else state.accounts.push(payload);
-    saveState();
-  }
+  try {
+    if (db) {
+      await upsertAccount(payload);
+      state = await loadState();
+    } else {
+      if (existing) Object.assign(existing, payload);
+      else state.accounts.push(payload);
+      saveState();
+    }
 
-  els.accountForm.reset();
-  document.querySelector("#accountId").value = "";
-  render();
+    els.accountForm.reset();
+    document.querySelector("#accountId").value = "";
+    render();
+  } catch (error) {
+    alert(`No se pudo guardar la cuenta: ${getErrorMessage(error)}`);
+  } finally {
+    setFormBusy(els.accountForm, false);
+  }
 });
 
 els.personForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  setPersonMessage("Guardando...");
+  els.personSubmitButton.disabled = true;
   const id = document.querySelector("#personId").value || crypto.randomUUID();
   const existing = state.people.find((person) => person.id === id);
   const payload = {
@@ -97,17 +109,23 @@ els.personForm.addEventListener("submit", async (event) => {
     note: document.querySelector("#personNote").value.trim(),
   };
 
-  if (db) {
-    await upsertPerson(payload);
-    state = await loadState();
-  } else {
-    if (existing) Object.assign(existing, payload);
-    else state.people.push(payload);
-    saveState();
-  }
+  try {
+    if (db) {
+      await upsertPerson(payload);
+      state = await loadState();
+    } else {
+      if (existing) Object.assign(existing, payload);
+      else state.people.push(payload);
+      saveState();
+    }
 
-  closePersonModal();
-  render();
+    closePersonModal();
+    render();
+  } catch (error) {
+    setPersonMessage(`No se pudo guardar: ${getErrorMessage(error)}`);
+  } finally {
+    els.personSubmitButton.disabled = false;
+  }
 });
 
 init();
@@ -254,12 +272,12 @@ function setAuthMessage(message) {
 }
 
 async function upsertAccount(account) {
-  const { error } = await db.from("accounts").upsert(toDbAccount(account));
+  const { error } = await db.from("accounts").upsert(toDbAccount(account), { onConflict: "id" });
   if (error) throw error;
 }
 
 async function upsertPerson(person) {
-  const { error } = await db.from("people").upsert(toDbPerson(person));
+  const { error } = await db.from("people").upsert(toDbPerson(person), { onConflict: "id" });
   if (error) throw error;
 }
 
@@ -280,6 +298,7 @@ function toDbAccount(account) {
     name: account.name,
     country: account.country,
     cost: account.cost,
+    pay_day: account.payDay,
   };
 }
 
@@ -290,6 +309,7 @@ function fromDbAccount(account) {
     name: account.name,
     country: account.country || "",
     cost: Number(account.cost || 0),
+    payDay: Number(account.pay_day || 1),
   };
 }
 
@@ -426,6 +446,7 @@ function renderAccounts() {
 
 function accountCard(account) {
   const members = state.people.filter((person) => person.accountId === account.id).length;
+  const nextPayment = nextPaymentDate(account.payDay || 1, startOfDay(new Date()));
   return `
     <article class="account-card">
       <div>
@@ -435,6 +456,8 @@ function accountCard(account) {
         <div class="meta">
           <span>Pais: ${escapeHtml(account.country || "Sin dato")}</span>
           <span>Costo mensual: ${currency(account.cost)}</span>
+          <span>Dia de pago: ${account.payDay || 1}</span>
+          <span>Proximo pago: ${formatDate(nextPayment)}</span>
           <span>Personas asignadas: ${members}</span>
         </div>
       </div>
@@ -519,6 +542,7 @@ function editAccount(id) {
   document.querySelector("#accountName").value = account.name;
   document.querySelector("#accountCountry").value = account.country || "";
   document.querySelector("#accountCost").value = account.cost;
+  document.querySelector("#accountPayDay").value = account.payDay || 1;
 }
 
 async function deleteAccount(id) {
@@ -560,12 +584,14 @@ function openPersonModal(id) {
   document.querySelector("#personAmount").value = person?.amount || "";
   document.querySelector("#personPaidUntil").value = person?.paidUntil || "";
   document.querySelector("#personNote").value = person?.note || "";
+  setPersonMessage("");
   els.personModal.showModal();
 }
 
 function closePersonModal() {
   els.personModal.close();
   els.personForm.reset();
+  setPersonMessage("");
 }
 
 function findAccount(id) {
@@ -612,14 +638,18 @@ async function confirmPayment(id) {
   person.paidUntil = dateToInputValue(paidUntil);
   person.lastPaymentAt = dateToInputValue(today);
 
-  if (db) {
-    await upsertPerson(person);
-    state = await loadState();
-  } else {
-    saveState();
-  }
+  try {
+    if (db) {
+      await upsertPerson(person);
+      state = await loadState();
+    } else {
+      saveState();
+    }
 
-  render();
+    render();
+  } catch (error) {
+    alert(`No se pudo confirmar el pago: ${getErrorMessage(error)}`);
+  }
 }
 
 function nextPaymentDate(day, fromDate) {
@@ -707,4 +737,18 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function setPersonMessage(message) {
+  els.personFormMessage.textContent = message;
+}
+
+function setFormBusy(form, busy) {
+  form.querySelectorAll("button, input, select, textarea").forEach((field) => {
+    field.disabled = busy;
+  });
+}
+
+function getErrorMessage(error) {
+  return error?.message || "revisa tu conexion y vuelve a intentar.";
 }

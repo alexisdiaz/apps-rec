@@ -4,11 +4,15 @@ create table if not exists public.accounts (
   name text not null,
   country text,
   cost numeric(10, 2) not null default 0,
+  pay_day integer not null default 1 check (pay_day between 1 and 31),
   created_at timestamptz not null default now()
 );
 
 alter table public.accounts
 add column if not exists country text;
+
+alter table public.accounts
+add column if not exists pay_day integer not null default 1 check (pay_day between 1 and 31);
 
 create table if not exists public.people (
   id uuid primary key,

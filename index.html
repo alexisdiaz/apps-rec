@@ -135,6 +135,10 @@
               Costo mensual
               <input id="accountCost" type="number" min="0" step="0.01" placeholder="12.99" />
             </label>
+            <label>
+              Dia de pago
+              <input id="accountPayDay" required type="number" min="1" max="31" value="1" />
+            </label>
             <button class="primary-btn" type="submit">Guardar cuenta</button>
           </form>
           <div class="account-list" id="accountList"></div>
@@ -151,7 +155,7 @@
     </div>
 
     <dialog class="modal" id="personModal">
-      <form class="modal-card" id="personForm" method="dialog">
+      <form class="modal-card" id="personForm">
         <div class="modal-header">
           <div>
             <p class="eyebrow">Registro</p>
@@ -195,10 +199,11 @@
           Nota
           <textarea id="personNote" rows="3" placeholder="Perfil que usa, correo, observaciones"></textarea>
         </label>
+        <p class="form-message" id="personFormMessage"></p>
 
         <div class="modal-actions">
           <button class="secondary-btn" type="button" id="cancelPerson">Cancelar</button>
-          <button class="primary-btn" type="submit">Guardar persona</button>
+          <button class="primary-btn" type="submit" id="personSubmitButton">Guardar persona</button>
         </div>
       </form>
     </dialog>
