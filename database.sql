@@ -2,9 +2,13 @@ create table if not exists public.accounts (
   id uuid primary key,
   service text not null,
   name text not null,
+  country text,
   cost numeric(10, 2) not null default 0,
   created_at timestamptz not null default now()
 );
+
+alter table public.accounts
+add column if not exists country text;
 
 create table if not exists public.people (
   id uuid primary key,

@@ -2,8 +2,8 @@ const STORAGE_KEY = "shared-entertainment-control";
 
 const seedData = {
   accounts: [
-    { id: crypto.randomUUID(), service: "Spotify", name: "Cuenta 1", cost: 12.99 },
-    { id: crypto.randomUUID(), service: "Disney+", name: "Cuenta familiar", cost: 13.99 },
+    { id: crypto.randomUUID(), service: "Spotify", name: "Cuenta 1", country: "El Salvador", cost: 12.99 },
+    { id: crypto.randomUUID(), service: "Disney+", name: "Cuenta familiar", country: "Estados Unidos", cost: 13.99 },
   ],
   people: [],
 };
@@ -22,7 +22,6 @@ const els = {
   },
   monthlyTotal: document.querySelector("#monthlyTotal"),
   subscriptionTotal: document.querySelector("#subscriptionTotal"),
-  activePeople: document.querySelector("#activePeople"),
   dueSoon: document.querySelector("#dueSoon"),
   paymentList: document.querySelector("#paymentList"),
   peopleList: document.querySelector("#peopleList"),
@@ -64,6 +63,7 @@ els.accountForm.addEventListener("submit", async (event) => {
     id,
     service: document.querySelector("#accountService").value.trim(),
     name: document.querySelector("#accountName").value.trim(),
+    country: document.querySelector("#accountCountry").value.trim(),
     cost: Number(document.querySelector("#accountCost").value || 0),
   };
 
@@ -278,6 +278,7 @@ function toDbAccount(account) {
     id: account.id,
     service: account.service,
     name: account.name,
+    country: account.country,
     cost: account.cost,
   };
 }
@@ -287,6 +288,7 @@ function fromDbAccount(account) {
     id: account.id,
     service: account.service,
     name: account.name,
+    country: account.country || "",
     cost: Number(account.cost || 0),
   };
 }
@@ -347,7 +349,6 @@ function renderSummary() {
   const subscriptionTotal = state.accounts.reduce((sum, account) => sum + Number(account.cost || 0), 0);
   els.monthlyTotal.textContent = currency(clientTotal);
   els.subscriptionTotal.textContent = currency(subscriptionTotal);
-  els.activePeople.textContent = state.people.length;
   els.dueSoon.textContent = state.people.filter((person) => {
     const status = paymentStatus(person);
     return status.key === "due" || status.key === "late";
@@ -432,6 +433,7 @@ function accountCard(account) {
           <strong>${escapeHtml(account.service)} · ${escapeHtml(account.name)}</strong>
         </div>
         <div class="meta">
+          <span>Pais: ${escapeHtml(account.country || "Sin dato")}</span>
           <span>Costo mensual: ${currency(account.cost)}</span>
           <span>Personas asignadas: ${members}</span>
         </div>
@@ -515,6 +517,7 @@ function editAccount(id) {
   document.querySelector("#accountId").value = account.id;
   document.querySelector("#accountService").value = account.service;
   document.querySelector("#accountName").value = account.name;
+  document.querySelector("#accountCountry").value = account.country || "";
   document.querySelector("#accountCost").value = account.cost;
 }
 

@@ -424,7 +424,7 @@ textarea:focus {
 }
 
 .account-form {
-  grid-template-columns: 1fr 1fr 160px 170px;
+  grid-template-columns: 1fr 1fr 180px 160px 170px;
 }
 
 .account-card,
@@ -486,7 +486,7 @@ textarea:focus {
 
   .summary-panel,
   .nav-tabs {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .main-content {

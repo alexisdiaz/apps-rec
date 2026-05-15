@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -42,10 +43,6 @@
           <div>
             <span class="summary-label">Costo suscripciones</span>
             <strong id="subscriptionTotal">$0.00</strong>
-          </div>
-          <div>
-            <span class="summary-label">Personas activas</span>
-            <strong id="activePeople">0</strong>
           </div>
           <div>
             <span class="summary-label">Vencen esta semana</span>
@@ -129,6 +126,10 @@
             <label>
               Cuenta
               <input id="accountName" required placeholder="Cuenta 1" />
+            </label>
+            <label>
+              Pais
+              <input id="accountCountry" placeholder="El Salvador, Mexico, USA" />
             </label>
             <label>
               Costo mensual
