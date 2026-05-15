@@ -10,6 +10,8 @@ const seedData = {
 
 let state = { accounts: [], people: [] };
 let db = null;
+let authUser = null;
+let isMember = false;
 const els = {
   viewTitle: document.querySelector("#viewTitle"),
   navTabs: document.querySelectorAll(".nav-tab"),
@@ -30,6 +32,15 @@ const els = {
   personModal: document.querySelector("#personModal"),
   searchInput: document.querySelector("#searchInput"),
   statusFilter: document.querySelector("#statusFilter"),
+  loginView: document.querySelector("#loginView"),
+  loginForm: document.querySelector("#loginForm"),
+  loginEmail: document.querySelector("#loginEmail"),
+  loginPassword: document.querySelector("#loginPassword"),
+  authMessage: document.querySelector("#authMessage"),
+  authPanel: document.querySelector("#authPanel"),
+  authEmailDisplay: document.querySelector("#authEmailDisplay"),
+  logoutButton: document.querySelector("#logoutButton"),
+  signupButton: document.querySelector("#signupButton"),
 };
 
 document.querySelector("#openPersonModal").addEventListener("click", () => openPersonModal());
@@ -37,6 +48,9 @@ document.querySelector("#closePersonModal").addEventListener("click", closePerso
 document.querySelector("#cancelPerson").addEventListener("click", closePersonModal);
 els.searchInput.addEventListener("input", render);
 els.statusFilter.addEventListener("change", render);
+els.loginForm.addEventListener("submit", signIn);
+els.signupButton.addEventListener("click", signUp);
+els.logoutButton.addEventListener("click", signOut);
 
 els.navTabs.forEach((tab) => {
   tab.addEventListener("click", () => setView(tab.dataset.view));
@@ -100,12 +114,29 @@ init();
 
 async function init() {
   db = createDatabaseClient();
+  if (db) {
+    const { data } = await db.auth.getSession();
+    authUser = data.session?.user || null;
+    isMember = authUser ? await checkMembership() : false;
+
+    db.auth.onAuthStateChange(async (_event, session) => {
+      authUser = session?.user || null;
+      isMember = authUser ? await checkMembership() : false;
+      state = authUser && isMember ? await loadState() : { accounts: [], people: [] };
+      renderAuth();
+      render();
+    });
+  }
+
   state = await loadState();
+  renderAuth();
   render();
   registerServiceWorker();
 }
 
 async function loadState() {
+  if (db && (!authUser || !isMember)) return { accounts: [], people: [] };
+
   if (db) {
     try {
       const [{ data: accounts, error: accountsError }, { data: people, error: peopleError }] = await Promise.all([
@@ -147,6 +178,79 @@ function createDatabaseClient() {
   const hasConfig = config.url && config.anonKey && !config.url.includes("TU-PROYECTO") && !config.anonKey.includes("TU-ANON-KEY");
   if (!hasConfig || !window.supabase) return null;
   return window.supabase.createClient(config.url, config.anonKey);
+}
+
+async function signIn(event) {
+  event.preventDefault();
+  setAuthMessage("Entrando...");
+  const { error } = await db.auth.signInWithPassword({
+    email: els.loginEmail.value.trim(),
+    password: els.loginPassword.value,
+  });
+
+  if (error) setAuthMessage(error.message);
+}
+
+async function signUp() {
+  setAuthMessage("Creando acceso...");
+  const { error } = await db.auth.signUp({
+    email: els.loginEmail.value.trim(),
+    password: els.loginPassword.value,
+  });
+
+  if (error) {
+    setAuthMessage(error.message);
+    return;
+  }
+
+  setAuthMessage("Revisa tu correo para confirmar la cuenta. Si ya está confirmada, intenta entrar.");
+}
+
+async function signOut() {
+  await db.auth.signOut();
+}
+
+async function checkMembership() {
+  const email = authUser?.email;
+  if (!email) return false;
+
+  const { data, error } = await db.from("app_members").select("email").eq("email", email.toLowerCase()).maybeSingle();
+  if (error) {
+    console.warn("No se pudo verificar el permiso del usuario.", error);
+    return false;
+  }
+
+  return Boolean(data);
+}
+
+function renderAuth() {
+  const requiresAuth = document.querySelectorAll(".requires-auth");
+  const shouldLogin = Boolean(db && (!authUser || !isMember));
+
+  els.loginView.hidden = !shouldLogin;
+  els.authPanel.hidden = !db || !authUser || !isMember;
+  requiresAuth.forEach((item) => {
+    item.hidden = shouldLogin;
+  });
+
+  if (!db) {
+    setAuthMessage("");
+    return;
+  }
+
+  if (authUser && isMember) {
+    els.authEmailDisplay.textContent = authUser.email;
+    setAuthMessage("");
+    return;
+  }
+
+  if (authUser && !isMember) {
+    setAuthMessage("Este correo inició sesión, pero no está autorizado para ver estos datos.");
+  }
+}
+
+function setAuthMessage(message) {
+  els.authMessage.textContent = message;
 }
 
 async function upsertAccount(account) {

@@ -20,17 +20,67 @@ create table if not exists public.people (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.app_members (
+  email text primary key,
+  created_at timestamptz not null default now()
+);
+
+insert into public.app_members (email)
+values
+  ('alexiszeldiaz@gmail.com'),
+  ('ppxnillermo@gmail.com')
+on conflict (email) do nothing;
+
 alter table public.accounts enable row level security;
 alter table public.people enable row level security;
+alter table public.app_members enable row level security;
 
-create policy "Allow app access to accounts"
+drop policy if exists "Allow app access to accounts" on public.accounts;
+drop policy if exists "Allow app access to people" on public.people;
+drop policy if exists "Members can read themselves" on public.app_members;
+drop policy if exists "Only members can manage accounts" on public.accounts;
+drop policy if exists "Only members can manage people" on public.people;
+
+create policy "Members can read themselves"
+on public.app_members
+for select
+to authenticated
+using (lower(email) = lower(auth.jwt() ->> 'email'));
+
+create policy "Only members can manage accounts"
 on public.accounts
 for all
-using (true)
-with check (true);
+to authenticated
+using (
+  exists (
+    select 1
+    from public.app_members
+    where lower(app_members.email) = lower(auth.jwt() ->> 'email')
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.app_members
+    where lower(app_members.email) = lower(auth.jwt() ->> 'email')
+  )
+);
 
-create policy "Allow app access to people"
+create policy "Only members can manage people"
 on public.people
 for all
-using (true)
-with check (true);
+to authenticated
+using (
+  exists (
+    select 1
+    from public.app_members
+    where lower(app_members.email) = lower(auth.jwt() ->> 'email')
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.app_members
+    where lower(app_members.email) = lower(auth.jwt() ->> 'email')
+  )
+);

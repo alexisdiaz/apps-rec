@@ -10,7 +10,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -23,13 +22,19 @@
           </div>
         </div>
 
-        <nav class="nav-tabs" aria-label="Secciones">
+        <section class="auth-panel" id="authPanel" hidden>
+          <span class="summary-label">Sesión activa</span>
+          <strong id="authEmailDisplay"></strong>
+          <button class="secondary-btn" type="button" id="logoutButton">Cerrar sesión</button>
+        </section>
+
+        <nav class="nav-tabs requires-auth" aria-label="Secciones">
           <button class="nav-tab active" type="button" data-view="dashboard">Inicio</button>
           <button class="nav-tab" type="button" data-view="accounts">Cuentas</button>
           <button class="nav-tab" type="button" data-view="people">Personas</button>
         </nav>
 
-        <section class="summary-panel" aria-label="Indicadores">
+        <section class="summary-panel requires-auth" aria-label="Indicadores">
           <div>
             <span class="summary-label">Cobro mensual</span>
             <strong id="monthlyTotal">$0.00</strong>
@@ -50,7 +55,30 @@
       </aside>
 
       <main class="main-content">
-        <header class="topbar">
+        <section class="login-view" id="loginView" hidden>
+          <form class="login-card" id="loginForm">
+            <div>
+              <p class="eyebrow">Acceso privado</p>
+              <h2>Inicia sesión</h2>
+              <p>Solo los correos autorizados en Supabase pueden ver o modificar los datos.</p>
+            </div>
+            <label>
+              Correo
+              <input id="loginEmail" type="email" autocomplete="email" required placeholder="tu-correo@email.com" />
+            </label>
+            <label>
+              Contraseña
+              <input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Tu contraseña" />
+            </label>
+            <p class="auth-message" id="authMessage"></p>
+            <div class="login-actions">
+              <button class="primary-btn" type="submit">Entrar</button>
+              <button class="secondary-btn" type="button" id="signupButton">Crear acceso</button>
+            </div>
+          </form>
+        </section>
+
+        <header class="topbar requires-auth">
           <div>
             <p class="eyebrow">Panel de control</p>
             <h2 id="viewTitle">Inicio</h2>
@@ -61,7 +89,7 @@
           </button>
         </header>
 
-        <section class="view active" id="dashboardView">
+        <section class="view active requires-auth" id="dashboardView">
           <div class="toolbar">
             <label class="search-box">
               <span>Buscar</span>
@@ -87,7 +115,7 @@
           </section>
         </section>
 
-        <section class="view" id="accountsView">
+        <section class="view requires-auth" id="accountsView">
           <div class="section-heading">
             <h3>Cuentas de streaming</h3>
             <p>Registra cuentas como Spotify cuenta 1, Disney cuenta familiar o Netflix premium.</p>
@@ -111,7 +139,7 @@
           <div class="account-list" id="accountList"></div>
         </section>
 
-        <section class="view" id="peopleView">
+        <section class="view requires-auth" id="peopleView">
           <div class="section-heading">
             <h3>Personas registradas</h3>
             <p>Edita teléfonos, recomendadores, cuentas asignadas y fechas mensuales.</p>
