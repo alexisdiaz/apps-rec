@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Control de Apps Compartidas</title>
+    <meta name="theme-color" content="#12241f" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Resumen">
+        <div class="brand">
+          <span class="brand-mark">CA</span>
+          <div>
+            <h1>Control Apps</h1>
+            <p>Pagos compartidos</p>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="Secciones">
+          <button class="nav-tab active" type="button" data-view="dashboard">Inicio</button>
+          <button class="nav-tab" type="button" data-view="accounts">Cuentas</button>
+          <button class="nav-tab" type="button" data-view="people">Personas</button>
+        </nav>
+
+        <section class="summary-panel" aria-label="Indicadores">
+          <div>
+            <span class="summary-label">Cobro mensual</span>
+            <strong id="monthlyTotal">$0.00</strong>
+          </div>
+          <div>
+            <span class="summary-label">Costo suscripciones</span>
+            <strong id="subscriptionTotal">$0.00</strong>
+          </div>
+          <div>
+            <span class="summary-label">Personas activas</span>
+            <strong id="activePeople">0</strong>
+          </div>
+          <div>
+            <span class="summary-label">Vencen esta semana</span>
+            <strong id="dueSoon">0</strong>
+          </div>
+        </section>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Panel de control</p>
+            <h2 id="viewTitle">Inicio</h2>
+          </div>
+          <button class="primary-btn" type="button" id="openPersonModal">
+            <span aria-hidden="true">+</span>
+            Agregar persona
+          </button>
+        </header>
+
+        <section class="view active" id="dashboardView">
+          <div class="toolbar">
+            <label class="search-box">
+              <span>Buscar</span>
+              <input id="searchInput" type="search" placeholder="Nombre, app, cuenta o recomendador" />
+            </label>
+            <label class="filter-box">
+              <span>Estado</span>
+              <select id="statusFilter">
+                <option value="all">Todos</option>
+                <option value="due">Por vencer</option>
+                <option value="late">Atrasados</option>
+                <option value="paid">Al día</option>
+              </select>
+            </label>
+          </div>
+
+          <section class="dashboard-grid" aria-label="Próximos pagos">
+            <div class="section-heading">
+              <h3>Pagos y recordatorios</h3>
+              <p>Usa WhatsApp para enviar un mensaje con el monto y la fecha de pago.</p>
+            </div>
+            <div class="payment-list" id="paymentList"></div>
+          </section>
+        </section>
+
+        <section class="view" id="accountsView">
+          <div class="section-heading">
+            <h3>Cuentas de streaming</h3>
+            <p>Registra cuentas como Spotify cuenta 1, Disney cuenta familiar o Netflix premium.</p>
+          </div>
+          <form class="form-grid account-form" id="accountForm">
+            <input type="hidden" id="accountId" />
+            <label>
+              App
+              <input id="accountService" required placeholder="Spotify, Disney, Netflix" />
+            </label>
+            <label>
+              Cuenta
+              <input id="accountName" required placeholder="Cuenta 1" />
+            </label>
+            <label>
+              Costo mensual
+              <input id="accountCost" type="number" min="0" step="0.01" placeholder="12.99" />
+            </label>
+            <button class="primary-btn" type="submit">Guardar cuenta</button>
+          </form>
+          <div class="account-list" id="accountList"></div>
+        </section>
+
+        <section class="view" id="peopleView">
+          <div class="section-heading">
+            <h3>Personas registradas</h3>
+            <p>Edita teléfonos, recomendadores, cuentas asignadas y fechas mensuales.</p>
+          </div>
+          <div class="people-list" id="peopleList"></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="modal" id="personModal">
+      <form class="modal-card" id="personForm" method="dialog">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Registro</p>
+            <h3 id="personModalTitle">Agregar persona</h3>
+          </div>
+          <button class="icon-btn" type="button" id="closePersonModal" aria-label="Cerrar">×</button>
+        </div>
+
+        <input type="hidden" id="personId" />
+        <div class="form-grid two-columns">
+          <label>
+            Nombre
+            <input id="personName" required placeholder="Nombre completo" />
+          </label>
+          <label>
+            WhatsApp
+            <input id="personPhone" inputmode="tel" placeholder="50371234567" />
+          </label>
+          <label>
+            Cuenta asignada
+            <select id="personAccount" required></select>
+          </label>
+          <label>
+            Recomendado por
+            <input id="personRecommendedBy" placeholder="Quien lo recomendó" />
+          </label>
+          <label>
+            Día de pago
+            <input id="personPayDay" required type="number" min="1" max="31" value="1" />
+          </label>
+          <label>
+            Monto mensual
+            <input id="personAmount" required type="number" min="0" step="0.01" placeholder="4.99" />
+          </label>
+          <label>
+            Pagado hasta
+            <input id="personPaidUntil" type="date" />
+          </label>
+        </div>
+        <label>
+          Nota
+          <textarea id="personNote" rows="3" placeholder="Perfil que usa, correo, observaciones"></textarea>
+        </label>
+
+        <div class="modal-actions">
+          <button class="secondary-btn" type="button" id="cancelPerson">Cancelar</button>
+          <button class="primary-btn" type="submit">Guardar persona</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
