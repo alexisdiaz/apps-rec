@@ -59,7 +59,6 @@ els.navTabs.forEach((tab) => {
 
 els.accountForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  setFormBusy(els.accountForm, true);
   const id = document.querySelector("#accountId").value || crypto.randomUUID();
   const existing = state.accounts.find((account) => account.id === id);
   const payload = {
@@ -71,6 +70,7 @@ els.accountForm.addEventListener("submit", async (event) => {
     payDay: clampPayDay(Number(document.querySelector("#accountPayDay").value)),
   };
 
+  setFormBusy(els.accountForm, true);
   try {
     if (db) {
       await upsertAccount(payload);
@@ -272,8 +272,17 @@ function setAuthMessage(message) {
 }
 
 async function upsertAccount(account) {
-  const { error } = await db.from("accounts").upsert(toDbAccount(account), { onConflict: "id" });
+  const dbAccount = toDbAccount(account);
+  const { data, error } = await db
+    .from("accounts")
+    .upsert(dbAccount, { onConflict: "id" })
+    .select("id,pay_day")
+    .single();
+
   if (error) throw error;
+  if (Number(data?.pay_day) !== Number(dbAccount.pay_day)) {
+    throw new Error("Supabase no devolvio el dia de pago guardado. Revisa que la columna pay_day exista y vuelve a ejecutar database.sql.");
+  }
 }
 
 async function upsertPerson(person) {
@@ -345,7 +354,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=3").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }

@@ -14,6 +14,8 @@ add column if not exists country text;
 alter table public.accounts
 add column if not exists pay_day integer not null default 1 check (pay_day between 1 and 31);
 
+notify pgrst, 'reload schema';
+
 create table if not exists public.people (
   id uuid primary key,
   name text not null,
