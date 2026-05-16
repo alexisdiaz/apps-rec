@@ -50,6 +50,8 @@ document.querySelector("#closePersonModal").addEventListener("click", closePerso
 document.querySelector("#cancelPerson").addEventListener("click", closePersonModal);
 els.searchInput.addEventListener("input", render);
 els.statusFilter.addEventListener("change", render);
+els.personAccounts.addEventListener("change", updatePersonAmountFromSelection);
+document.querySelector("#personDiscount").addEventListener("input", updatePersonAmountFromSelection);
 els.loginForm.addEventListener("submit", signIn);
 els.signupButton.addEventListener("click", signUp);
 els.logoutButton.addEventListener("click", signOut);
@@ -68,6 +70,7 @@ els.accountForm.addEventListener("submit", async (event) => {
     name: document.querySelector("#accountName").value.trim(),
     country: document.querySelector("#accountCountry").value.trim(),
     cost: Number(document.querySelector("#accountCost").value || 0),
+    profilePrice: Number(document.querySelector("#accountProfilePrice").value || 0),
     payDay: clampPayDay(Number(document.querySelector("#accountPayDay").value)),
   };
 
@@ -114,6 +117,7 @@ els.personForm.addEventListener("submit", async (event) => {
     recommendedBy: document.querySelector("#personRecommendedBy").value.trim(),
     payDay: clampPayDay(Number(document.querySelector("#personPayDay").value)),
     amount: Number(document.querySelector("#personAmount").value || 0),
+    discount: Number(document.querySelector("#personDiscount").value || 0),
     paidUntil: document.querySelector("#personPaidUntil").value,
     note: document.querySelector("#personNote").value.trim(),
   };
@@ -316,6 +320,7 @@ function toDbAccount(account) {
     name: account.name,
     country: account.country,
     cost: account.cost,
+    profile_price: account.profilePrice,
     pay_day: account.payDay,
   };
 }
@@ -327,6 +332,7 @@ function fromDbAccount(account) {
     name: account.name,
     country: account.country || "",
     cost: Number(account.cost || 0),
+    profilePrice: Number(account.profile_price || 0),
     payDay: Number(account.pay_day || 1),
   };
 }
@@ -341,6 +347,7 @@ function toDbPerson(person) {
     recommended_by: person.recommendedBy,
     pay_day: person.payDay,
     amount: person.amount,
+    discount: person.discount || 0,
     paid_until: person.paidUntil || null,
     last_payment_at: person.lastPaymentAt || null,
     note: person.note,
@@ -358,6 +365,7 @@ function fromDbPerson(person) {
     recommendedBy: person.recommended_by || "",
     payDay: Number(person.pay_day || 1),
     amount: Number(person.amount || 0),
+    discount: Number(person.discount || 0),
     paidUntil: person.paid_until || "",
     lastPaymentAt: person.last_payment_at || "",
     note: person.note || "",
@@ -366,7 +374,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=5").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=6").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
@@ -445,6 +453,7 @@ function paymentCard(person) {
           <span>${escapeHtml(accountsLabel)}</span>
           <span>Pago: ${formatDate(person.status.nextDate)}</span>
           <span>Monto: ${currency(person.amount)}</span>
+          ${person.discount ? `<span>Descuento: ${currency(person.discount)}</span>` : ""}
           <span>Recomendó: ${escapeHtml(person.recommendedBy || "Sin dato")}</span>
           ${person.paidUntil ? `<span>Pagado hasta: ${formatDate(parseStoredDate(person.paidUntil))}</span>` : ""}
         </div>
@@ -485,6 +494,7 @@ function accountCard(account) {
         <div class="meta">
           <span>Pais: ${escapeHtml(account.country || "Sin dato")}</span>
           <span>Costo mensual: ${currency(account.cost)}</span>
+          <span>Precio por perfil: ${currency(account.profilePrice)}</span>
           <span>Dia de pago: ${account.payDay || 1}</span>
           <span>Proximo pago: ${formatDate(nextPayment)}</span>
           <span>Personas asignadas: ${members}</span>
@@ -523,6 +533,7 @@ function personCard(person) {
           <span>WhatsApp: ${escapeHtml(person.phone || "Sin número")}</span>
           <span>Día ${person.payDay} de cada mes</span>
           <span>Próximo pago: ${formatDate(status.nextDate)}</span>
+          ${person.discount ? `<span>Descuento: ${currency(person.discount)}</span>` : ""}
           <span>Recomendó: ${escapeHtml(person.recommendedBy || "Sin dato")}</span>
           ${person.paidUntil ? `<span>Pagado hasta: ${formatDate(parseStoredDate(person.paidUntil))}</span>` : ""}
           ${person.note ? `<span>Nota: ${escapeHtml(person.note)}</span>` : ""}
@@ -572,6 +583,7 @@ function editAccount(id) {
   document.querySelector("#accountName").value = account.name;
   document.querySelector("#accountCountry").value = account.country || "";
   document.querySelector("#accountCost").value = account.cost;
+  document.querySelector("#accountProfilePrice").value = account.profilePrice || "";
   document.querySelector("#accountPayDay").value = account.payDay || 1;
 }
 
@@ -612,8 +624,10 @@ function openPersonModal(id) {
   document.querySelector("#personRecommendedBy").value = person?.recommendedBy || "";
   document.querySelector("#personPayDay").value = person?.payDay || 1;
   document.querySelector("#personAmount").value = person?.amount || "";
+  document.querySelector("#personDiscount").value = person?.discount || 0;
   document.querySelector("#personPaidUntil").value = person?.paidUntil || "";
   document.querySelector("#personNote").value = person?.note || "";
+  updatePersonAmountFromSelection();
   setPersonMessage("");
   els.personModal.showModal();
 }
@@ -783,6 +797,13 @@ function setSelectedPersonAccounts(ids) {
   els.personAccounts.querySelectorAll("input[type='checkbox']").forEach((input) => {
     input.checked = selected.has(input.value);
   });
+}
+
+function updatePersonAmountFromSelection() {
+  const selectedAccounts = findAccounts(getSelectedPersonAccountIds()).filter((account) => account.service !== "Sin cuenta");
+  const subtotal = selectedAccounts.reduce((sum, account) => sum + Number(account.profilePrice || 0), 0);
+  const discount = Number(document.querySelector("#personDiscount").value || 0);
+  document.querySelector("#personAmount").value = Math.max(0, subtotal - discount).toFixed(2);
 }
 
 function normalizeAccountIds(ids, fallbackId = "") {

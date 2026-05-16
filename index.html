@@ -135,6 +135,10 @@
               <input id="accountCost" type="number" min="0" step="0.01" placeholder="12.99" />
             </label>
             <label>
+              Precio por perfil
+              <input id="accountProfilePrice" type="number" min="0" step="0.01" placeholder="4.99" />
+            </label>
+            <label>
               Dia de pago
               <input id="accountPayDay" required type="number" min="1" max="31" value="1" />
             </label>
@@ -190,6 +194,10 @@
             <input id="personAmount" required type="number" min="0" step="0.01" placeholder="4.99" />
           </label>
           <label>
+            Descuento mensual
+            <input id="personDiscount" type="number" min="0" step="0.01" value="0" />
+          </label>
+          <label>
             Pagado hasta
             <input id="personPaidUntil" type="date" />
           </label>
@@ -208,7 +216,7 @@
     </dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js?v=5"></script>
-    <script src="app.js?v=5"></script>
+    <script src="supabase-config.js?v=6"></script>
+    <script src="app.js?v=6"></script>
   </body>
 </html>
