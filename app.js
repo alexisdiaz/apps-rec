@@ -366,7 +366,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=4").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=5").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
@@ -402,7 +402,7 @@ function renderAccountOptions() {
       (account) => `
         <label class="account-option">
           <input type="checkbox" value="${account.id}" />
-          <span></span>
+          <span>${escapeHtml(accountLabel(account))}</span>
         </label>
       `,
     )

@@ -349,7 +349,7 @@ textarea:focus {
 .account-picker {
   display: grid;
   gap: 8px;
-  max-height: 180px;
+  max-height: 150px;
   overflow: auto;
   padding: 10px;
   border: 1px solid var(--line);
