@@ -346,6 +346,30 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(18, 108, 90, 0.14);
 }
 
+.account-picker {
+  display: grid;
+  gap: 8px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.account-option {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.account-option input {
+  width: 18px;
+  height: 18px;
+}
+
 .section-heading {
   margin-bottom: 16px;
 }

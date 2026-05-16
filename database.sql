@@ -21,6 +21,7 @@ create table if not exists public.people (
   name text not null,
   phone text,
   account_id uuid not null references public.accounts(id) on delete restrict,
+  account_ids uuid[] not null default '{}',
   recommended_by text,
   pay_day integer not null check (pay_day between 1 and 31),
   amount numeric(10, 2) not null default 0,
@@ -34,6 +35,15 @@ create table if not exists public.app_members (
   email text primary key,
   created_at timestamptz not null default now()
 );
+
+alter table public.people
+add column if not exists account_ids uuid[] not null default '{}';
+
+update public.people
+set account_ids = array[account_id]
+where coalesce(array_length(account_ids, 1), 0) = 0;
+
+notify pgrst, 'reload schema';
 
 insert into public.app_members (email)
 values

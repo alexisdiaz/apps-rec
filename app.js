@@ -31,6 +31,7 @@ const els = {
   personModal: document.querySelector("#personModal"),
   personFormMessage: document.querySelector("#personFormMessage"),
   personSubmitButton: document.querySelector("#personSubmitButton"),
+  personAccounts: document.querySelector("#personAccounts"),
   searchInput: document.querySelector("#searchInput"),
   statusFilter: document.querySelector("#statusFilter"),
   loginView: document.querySelector("#loginView"),
@@ -97,11 +98,19 @@ els.personForm.addEventListener("submit", async (event) => {
   els.personSubmitButton.disabled = true;
   const id = document.querySelector("#personId").value || crypto.randomUUID();
   const existing = state.people.find((person) => person.id === id);
+  const accountIds = getSelectedPersonAccountIds();
+  if (!accountIds.length) {
+    setPersonMessage("Selecciona al menos una cuenta.");
+    els.personSubmitButton.disabled = false;
+    return;
+  }
+
   const payload = {
     id,
     name: document.querySelector("#personName").value.trim(),
     phone: normalizePhone(document.querySelector("#personPhone").value),
-    accountId: document.querySelector("#personAccount").value,
+    accountId: accountIds[0],
+    accountIds,
     recommendedBy: document.querySelector("#personRecommendedBy").value.trim(),
     payDay: clampPayDay(Number(document.querySelector("#personPayDay").value)),
     amount: Number(document.querySelector("#personAmount").value || 0),
@@ -328,6 +337,7 @@ function toDbPerson(person) {
     name: person.name,
     phone: person.phone,
     account_id: person.accountId,
+    account_ids: person.accountIds || [person.accountId],
     recommended_by: person.recommendedBy,
     pay_day: person.payDay,
     amount: person.amount,
@@ -338,11 +348,13 @@ function toDbPerson(person) {
 }
 
 function fromDbPerson(person) {
+  const accountIds = normalizeAccountIds(person.account_ids, person.account_id);
   return {
     id: person.id,
     name: person.name,
     phone: person.phone || "",
-    accountId: person.account_id,
+    accountId: accountIds[0] || person.account_id,
+    accountIds,
     recommendedBy: person.recommended_by || "",
     payDay: Number(person.pay_day || 1),
     amount: Number(person.amount || 0),
@@ -354,7 +366,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=3").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=4").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
@@ -385,9 +397,15 @@ function renderSummary() {
 }
 
 function renderAccountOptions() {
-  const select = document.querySelector("#personAccount");
-  select.innerHTML = state.accounts
-    .map((account) => `<option value="${account.id}">${escapeHtml(account.service)} - ${escapeHtml(account.name)}</option>`)
+  els.personAccounts.innerHTML = state.accounts
+    .map(
+      (account) => `
+        <label class="account-option">
+          <input type="checkbox" value="${account.id}" />
+          <span></span>
+        </label>
+      `,
+    )
     .join("");
 }
 
@@ -395,9 +413,10 @@ function renderPayments() {
   const query = els.searchInput.value.trim().toLowerCase();
   const status = els.statusFilter.value;
   const people = state.people
-    .map((person) => ({ ...person, account: findAccount(person.accountId), status: paymentStatus(person) }))
+    .map((person) => ({ ...person, accounts: findAccounts(person.accountIds || person.accountId), status: paymentStatus(person) }))
     .filter((person) => {
-      const searchable = `${person.name} ${person.phone} ${person.recommendedBy} ${person.account.service} ${person.account.name}`.toLowerCase();
+      const accountText = person.accounts.map(accountLabel).join(" ");
+      const searchable = `${person.name} ${person.phone} ${person.recommendedBy} ${accountText}`.toLowerCase();
       const matchesQuery = !query || searchable.includes(query);
       const matchesStatus = status === "all" || person.status.key === status;
       return matchesQuery && matchesStatus;
@@ -414,6 +433,7 @@ function renderPayments() {
 function paymentCard(person) {
   const message = buildWhatsappMessage(person);
   const whatsappUrl = person.phone ? `https://wa.me/${person.phone}?text=${encodeURIComponent(message)}` : "";
+  const accountsLabel = accountListLabel(person.accounts);
   return `
     <article class="payment-card">
       <div>
@@ -422,7 +442,7 @@ function paymentCard(person) {
           <span class="badge ${person.status.key}">${person.status.label}</span>
         </div>
         <div class="meta">
-          <span>${escapeHtml(person.account.service)} · ${escapeHtml(person.account.name)}</span>
+          <span>${escapeHtml(accountsLabel)}</span>
           <span>Pago: ${formatDate(person.status.nextDate)}</span>
           <span>Monto: ${currency(person.amount)}</span>
           <span>Recomendó: ${escapeHtml(person.recommendedBy || "Sin dato")}</span>
@@ -454,13 +474,13 @@ function renderAccounts() {
 }
 
 function accountCard(account) {
-  const members = state.people.filter((person) => person.accountId === account.id).length;
+  const members = state.people.filter((person) => normalizeAccountIds(person.accountIds, person.accountId).includes(account.id)).length;
   const nextPayment = nextPaymentDate(account.payDay || 1, startOfDay(new Date()));
   return `
     <article class="account-card">
       <div>
         <div class="card-title">
-          <strong>${escapeHtml(account.service)} · ${escapeHtml(account.name)}</strong>
+          <strong>${escapeHtml(account.service)} - ${escapeHtml(account.name)}</strong>
         </div>
         <div class="meta">
           <span>Pais: ${escapeHtml(account.country || "Sin dato")}</span>
@@ -487,7 +507,8 @@ function renderPeople() {
 }
 
 function personCard(person) {
-  const account = findAccount(person.accountId);
+  const accounts = findAccounts(person.accountIds || person.accountId);
+  const accountsLabel = accountListLabel(accounts);
   const status = paymentStatus(person);
   return `
     <article class="person-card">
@@ -498,7 +519,7 @@ function personCard(person) {
           <span class="badge paid">${currency(person.amount)}</span>
         </div>
         <div class="meta">
-          <span>${escapeHtml(account.service)} · ${escapeHtml(account.name)}</span>
+          <span>${escapeHtml(accountsLabel)}</span>
           <span>WhatsApp: ${escapeHtml(person.phone || "Sin número")}</span>
           <span>Día ${person.payDay} de cada mes</span>
           <span>Próximo pago: ${formatDate(status.nextDate)}</span>
@@ -558,7 +579,7 @@ async function deleteAccount(id) {
   const account = state.accounts.find((item) => item.id === id);
   if (!account) return;
 
-  const hasPeople = state.people.some((person) => person.accountId === id);
+  const hasPeople = state.people.some((person) => normalizeAccountIds(person.accountIds, person.accountId).includes(id));
   if (hasPeople) {
     alert("Primero mueve o elimina las personas asignadas a esta cuenta.");
     return;
@@ -587,7 +608,7 @@ function openPersonModal(id) {
   document.querySelector("#personId").value = person?.id || "";
   document.querySelector("#personName").value = person?.name || "";
   document.querySelector("#personPhone").value = person?.phone || "";
-  document.querySelector("#personAccount").value = person?.accountId || state.accounts[0].id;
+  setSelectedPersonAccounts(person?.accountIds || (person?.accountId ? [person.accountId] : [state.accounts[0].id]));
   document.querySelector("#personRecommendedBy").value = person?.recommendedBy || "";
   document.querySelector("#personPayDay").value = person?.payDay || 1;
   document.querySelector("#personAmount").value = person?.amount || "";
@@ -605,6 +626,11 @@ function closePersonModal() {
 
 function findAccount(id) {
   return state.accounts.find((account) => account.id === id) || { service: "Sin cuenta", name: "No asignada", cost: 0 };
+}
+
+function findAccounts(ids) {
+  const accounts = normalizeAccountIds(ids).map(findAccount).filter((account) => account.service !== "Sin cuenta");
+  return accounts.length ? accounts : [findAccount(null)];
 }
 
 function paymentStatus(person) {
@@ -717,9 +743,9 @@ function dateToInputValue(date) {
 }
 
 function buildWhatsappMessage(person) {
-  const account = findAccount(person.accountId);
+  const accounts = findAccounts(person.accountIds || person.accountId);
   const due = formatDate(paymentStatus(person).nextDate);
-  return `Hola ${person.name}, te recuerdo el pago de ${account.service} (${account.name}) por ${currency(person.amount)}. Fecha de pago: ${due}. Gracias.`;
+  return `Hola ${person.name}, te recuerdo el pago de ${accountListLabel(accounts)} por ${currency(person.amount)}. Fecha de pago: ${due}. Gracias.`;
 }
 
 function normalizePhone(value) {
@@ -746,6 +772,31 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function getSelectedPersonAccountIds() {
+  return Array.from(els.personAccounts.querySelectorAll("input[type='checkbox']:checked")).map((input) => input.value);
+}
+
+function setSelectedPersonAccounts(ids) {
+  const selected = new Set(normalizeAccountIds(ids));
+  els.personAccounts.querySelectorAll("input[type='checkbox']").forEach((input) => {
+    input.checked = selected.has(input.value);
+  });
+}
+
+function normalizeAccountIds(ids, fallbackId = "") {
+  if (Array.isArray(ids)) return ids.filter(Boolean);
+  if (typeof ids === "string" && ids) return [ids];
+  return fallbackId ? [fallbackId] : [];
+}
+
+function accountLabel(account) {
+  return `${account.service} - ${account.name}`;
+}
+
+function accountListLabel(accounts) {
+  return accounts.map(accountLabel).join(", ");
 }
 
 function setPersonMessage(message) {
