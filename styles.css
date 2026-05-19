@@ -375,8 +375,26 @@ textarea:focus {
   height: 18px;
 }
 
-.account-option select {
+.profile-picker {
+  display: grid;
+  gap: 6px;
   margin-left: 26px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #f7faf8;
+}
+
+.profile-option {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.profile-empty {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .wide-field {

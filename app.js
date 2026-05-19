@@ -381,7 +381,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=7").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=8").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
@@ -417,13 +417,25 @@ function renderAccountOptions() {
       (account) => `
         <div class="account-option" data-account-option="${account.id}">
           <label class="account-option-check">
-            <input type="checkbox" value="${account.id}" />
+            <input type="checkbox" value="${account.id}" data-account-checkbox />
             <span>${escapeHtml(accountLabel(account))}</span>
           </label>
-          <select data-profile-for="${account.id}" disabled>
-            <option value="">Sin perfil asignado</option>
-            ${(account.profileNames || []).map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}
-          </select>
+          <div class="profile-picker" data-profile-for="${account.id}" hidden>
+            ${
+              (account.profileNames || []).length
+                ? account.profileNames
+                    .map(
+                      (name) => `
+                        <label class="profile-option">
+                          <input type="checkbox" value="${escapeHtml(name)}" />
+                          <span>${escapeHtml(name)}</span>
+                        </label>
+                      `,
+                    )
+                    .join("")
+                : `<span class="profile-empty">Sin usuarios registrados</span>`
+            }
+          </div>
         </div>
       `,
     )
@@ -804,33 +816,30 @@ function escapeHtml(value) {
 }
 
 function getSelectedPersonAccountIds() {
-  return Array.from(els.personAccounts.querySelectorAll("input[type='checkbox']:checked")).map((input) => input.value);
+  return Array.from(els.personAccounts.querySelectorAll("[data-account-checkbox]:checked")).map((input) => input.value);
 }
 
 function getSelectedPersonProfiles() {
   return getSelectedPersonAccountIds().reduce((profiles, accountId) => {
-    const profile = getProfileSelect(accountId)?.value || "";
-    if (profile) profiles[accountId] = profile;
+    const selectedProfiles = getSelectedProfilesForAccount(accountId);
+    if (selectedProfiles.length) profiles[accountId] = selectedProfiles;
     return profiles;
   }, {});
 }
 
 function setSelectedPersonAccounts(ids, profiles = {}) {
   const selected = new Set(normalizeAccountIds(ids));
-  els.personAccounts.querySelectorAll("input[type='checkbox']").forEach((input) => {
+  els.personAccounts.querySelectorAll("[data-account-checkbox]").forEach((input) => {
     input.checked = selected.has(input.value);
-    const select = getProfileSelect(input.value);
-    if (select) {
-      select.disabled = !input.checked;
-      select.value = profiles[input.value] || "";
-    }
+    setSelectedProfilesForAccount(input.value, profiles[input.value]);
   });
+  syncAccountProfileControls();
 }
 
 function updatePersonAmountFromSelection() {
   syncAccountProfileControls();
   const selectedAccounts = findAccounts(getSelectedPersonAccountIds()).filter((account) => account.service !== "Sin cuenta");
-  const subtotal = selectedAccounts.reduce((sum, account) => sum + Number(account.profilePrice || 0), 0);
+  const subtotal = selectedAccounts.reduce((sum, account) => sum + Number(account.profilePrice || 0) * getBillableProfileCount(account), 0);
   const discount = Number(document.querySelector("#personDiscount").value || 0);
   document.querySelector("#personAmount").value = Math.max(0, subtotal - discount).toFixed(2);
 }
@@ -846,8 +855,8 @@ function accountLabel(account) {
 }
 
 function accountAssignmentLabel(account, profiles = {}) {
-  const profile = profiles?.[account.id];
-  return profile ? `${accountLabel(account)} (${profile})` : accountLabel(account);
+  const selectedProfiles = normalizeProfileSelection(profiles?.[account.id]);
+  return selectedProfiles.length ? `${accountLabel(account)} (${selectedProfiles.join(", ")})` : accountLabel(account);
 }
 
 function accountListLabel(accounts, profiles = {}) {
@@ -863,14 +872,41 @@ function parseProfileNames(value) {
 
 function syncAccountProfileControls() {
   els.personAccounts.querySelectorAll("[data-account-option]").forEach((option) => {
-    const checkbox = option.querySelector("input[type='checkbox']");
-    const select = option.querySelector("select");
-    if (select) select.disabled = !checkbox.checked;
+    const checkbox = option.querySelector("[data-account-checkbox]");
+    const picker = option.querySelector("[data-profile-for]");
+    if (picker) picker.hidden = !checkbox.checked;
   });
 }
 
-function getProfileSelect(accountId) {
-  return Array.from(els.personAccounts.querySelectorAll("[data-profile-for]")).find((select) => select.dataset.profileFor === accountId);
+function getProfilePicker(accountId) {
+  return Array.from(els.personAccounts.querySelectorAll("[data-profile-for]")).find((picker) => picker.dataset.profileFor === accountId);
+}
+
+function getSelectedProfilesForAccount(accountId) {
+  const picker = getProfilePicker(accountId);
+  if (!picker) return [];
+  return Array.from(picker.querySelectorAll("input[type='checkbox']:checked")).map((input) => input.value);
+}
+
+function setSelectedProfilesForAccount(accountId, profiles) {
+  const selectedProfiles = new Set(normalizeProfileSelection(profiles));
+  const picker = getProfilePicker(accountId);
+  if (!picker) return;
+  picker.querySelectorAll("input[type='checkbox']").forEach((input) => {
+    input.checked = selectedProfiles.has(input.value);
+  });
+}
+
+function normalizeProfileSelection(profiles) {
+  if (Array.isArray(profiles)) return profiles.filter(Boolean);
+  if (typeof profiles === "string" && profiles) return [profiles];
+  return [];
+}
+
+function getBillableProfileCount(account) {
+  const selectedProfiles = getSelectedProfilesForAccount(account.id);
+  if (selectedProfiles.length) return selectedProfiles.length;
+  return 1;
 }
 
 function setPersonMessage(message) {
