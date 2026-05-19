@@ -24,6 +24,7 @@ const els = {
   },
   monthlyTotal: document.querySelector("#monthlyTotal"),
   subscriptionTotal: document.querySelector("#subscriptionTotal"),
+  expectedRevenue: document.querySelector("#expectedRevenue"),
   dueSoon: document.querySelector("#dueSoon"),
   paymentList: document.querySelector("#paymentList"),
   peopleList: document.querySelector("#peopleList"),
@@ -472,7 +473,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=9").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=10").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
@@ -494,8 +495,13 @@ function render() {
 function renderSummary() {
   const clientTotal = state.people.reduce((sum, person) => sum + Number(person.amount || 0), 0);
   const subscriptionTotal = state.accounts.reduce((sum, account) => sum + Number(account.cost || 0), 0);
+  const expectedRevenue = state.accounts.reduce(
+    (sum, account) => sum + Number(account.profilePrice || 0) * (account.profileNames || []).length,
+    0,
+  );
   els.monthlyTotal.textContent = currency(clientTotal);
   els.subscriptionTotal.textContent = currency(subscriptionTotal);
+  els.expectedRevenue.textContent = currency(expectedRevenue);
   els.dueSoon.textContent = state.people.filter((person) => {
     const status = paymentStatus(person);
     return status.key === "due" || status.key === "late";
