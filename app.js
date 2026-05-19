@@ -1,4 +1,6 @@
 const STORAGE_KEY = "shared-entertainment-control";
+const DB_TIMEOUT_MS = 15000;
+const SESSION_REFRESH_MARGIN_SECONDS = 120;
 
 const seedData = {
   accounts: [
@@ -149,20 +151,30 @@ init();
 async function init() {
   db = createDatabaseClient();
   if (db) {
-    const { data } = await db.auth.getSession();
+    const { data } = await withTimeout(db.auth.getSession(), "No se pudo verificar la sesion.");
     authUser = data.session?.user || null;
     isMember = authUser ? await checkMembership() : false;
 
     db.auth.onAuthStateChange(async (_event, session) => {
       authUser = session?.user || null;
       isMember = authUser ? await checkMembership() : false;
-      state = authUser && isMember ? await loadState() : { accounts: [], people: [] };
+      try {
+        state = authUser && isMember ? await loadState() : { accounts: [], people: [] };
+      } catch (error) {
+        console.warn("No se pudieron actualizar los datos despues del cambio de sesion.", error);
+        alert(`No se pudieron actualizar los datos: ${getErrorMessage(error)}`);
+      }
       renderAuth();
       render();
     });
   }
 
-  state = await loadState();
+  try {
+    state = await loadState();
+  } catch (error) {
+    console.warn("No se pudieron cargar los datos iniciales.", error);
+    alert(`No se pudieron cargar los datos: ${getErrorMessage(error)}`);
+  }
   renderAuth();
   render();
   registerServiceWorker();
@@ -172,21 +184,17 @@ async function loadState() {
   if (db && (!authUser || !isMember)) return { accounts: [], people: [] };
 
   if (db) {
-    try {
-      const [{ data: accounts, error: accountsError }, { data: people, error: peopleError }] = await Promise.all([
-        db.from("accounts").select("*").order("service", { ascending: true }),
-        db.from("people").select("*").order("name", { ascending: true }),
-      ]);
+    const [{ data: accounts, error: accountsError }, { data: people, error: peopleError }] = await Promise.all([
+      runDbQuery(() => db.from("accounts").select("*").order("service", { ascending: true }), "No se pudieron cargar las cuentas."),
+      runDbQuery(() => db.from("people").select("*").order("name", { ascending: true }), "No se pudieron cargar las personas."),
+    ]);
 
-      if (accountsError || peopleError) throw accountsError || peopleError;
+    if (accountsError || peopleError) throw accountsError || peopleError;
 
-      return {
-        accounts: accounts.map(fromDbAccount),
-        people: people.map(fromDbPerson),
-      };
-    } catch (error) {
-      console.warn("No se pudo conectar a Supabase. Usando datos locales.", error);
-    }
+    return {
+      accounts: accounts.map(fromDbAccount),
+      people: people.map(fromDbPerson),
+    };
   }
 
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -217,20 +225,36 @@ function createDatabaseClient() {
 async function signIn(event) {
   event.preventDefault();
   setAuthMessage("Entrando...");
-  const { error } = await db.auth.signInWithPassword({
-    email: els.loginEmail.value.trim(),
-    password: els.loginPassword.value,
-  });
+  let error = null;
+  try {
+    ({ error } = await withTimeout(
+      db.auth.signInWithPassword({
+        email: els.loginEmail.value.trim(),
+        password: els.loginPassword.value,
+      }),
+      "No se pudo iniciar sesion.",
+    ));
+  } catch (caughtError) {
+    error = caughtError;
+  }
 
   if (error) setAuthMessage(error.message);
 }
 
 async function signUp() {
   setAuthMessage("Creando acceso...");
-  const { error } = await db.auth.signUp({
-    email: els.loginEmail.value.trim(),
-    password: els.loginPassword.value,
-  });
+  let error = null;
+  try {
+    ({ error } = await withTimeout(
+      db.auth.signUp({
+        email: els.loginEmail.value.trim(),
+        password: els.loginPassword.value,
+      }),
+      "No se pudo crear el acceso.",
+    ));
+  } catch (caughtError) {
+    error = caughtError;
+  }
 
   if (error) {
     setAuthMessage(error.message);
@@ -241,14 +265,17 @@ async function signUp() {
 }
 
 async function signOut() {
-  await db.auth.signOut();
+  await withTimeout(db.auth.signOut(), "No se pudo cerrar sesion.");
 }
 
-async function checkMembership() {
+async function checkMembership(options = {}) {
   const email = authUser?.email;
   if (!email) return false;
 
-  const { data, error } = await db.from("app_members").select("email").eq("email", email.toLowerCase()).maybeSingle();
+  const query = () => db.from("app_members").select("email").eq("email", email.toLowerCase()).maybeSingle();
+  const { data, error } = options.skipSessionCheck
+    ? await withTimeout(query(), "No se pudo verificar el permiso del usuario.")
+    : await runDbQuery(query, "No se pudo verificar el permiso del usuario.");
   if (error) {
     console.warn("No se pudo verificar el permiso del usuario.", error);
     return false;
@@ -287,13 +314,74 @@ function setAuthMessage(message) {
   els.authMessage.textContent = message;
 }
 
+async function runDbQuery(queryFactory, timeoutMessage) {
+  await ensureActiveSession();
+
+  try {
+    return await withTimeout(queryFactory(), timeoutMessage);
+  } catch (error) {
+    if (!isSessionError(error)) throw error;
+    await refreshActiveSession();
+    return withTimeout(queryFactory(), timeoutMessage);
+  }
+}
+
+async function ensureActiveSession() {
+  if (!db) return;
+
+  const { data, error } = await withTimeout(db.auth.getSession(), "No se pudo verificar la sesion.");
+  if (error) throw error;
+
+  let session = data.session;
+  if (!session) {
+    authUser = null;
+    isMember = false;
+    renderAuth();
+    throw new Error("Tu sesion expiro. Inicia sesion de nuevo y vuelve a guardar.");
+  }
+
+  const secondsLeft = Number(session.expires_at || 0) - Math.floor(Date.now() / 1000);
+  if (session.expires_at && secondsLeft < SESSION_REFRESH_MARGIN_SECONDS) {
+    session = await refreshActiveSession();
+  }
+
+  authUser = session.user;
+  isMember = await checkMembership({ skipSessionCheck: true });
+  renderAuth();
+
+  if (!isMember) {
+    throw new Error("Este usuario ya no tiene permiso para modificar los datos.");
+  }
+}
+
+async function refreshActiveSession() {
+  const { data, error } = await withTimeout(db.auth.refreshSession(), "No se pudo renovar la sesion.");
+  if (error) throw error;
+  if (!data.session) throw new Error("Tu sesion expiro. Inicia sesion de nuevo y vuelve a guardar.");
+  authUser = data.session.user;
+  return data.session;
+}
+
+function withTimeout(promise, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error(`${message} Revisa tu conexion e intenta otra vez.`)), DB_TIMEOUT_MS);
+    }),
+  ]);
+}
+
+function isSessionError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("jwt") || message.includes("token") || message.includes("session") || message.includes("auth");
+}
+
 async function upsertAccount(account) {
   const dbAccount = toDbAccount(account);
-  const { data, error } = await db
-    .from("accounts")
-    .upsert(dbAccount, { onConflict: "id" })
-    .select("id,pay_day")
-    .single();
+  const { data, error } = await runDbQuery(
+    () => db.from("accounts").upsert(dbAccount, { onConflict: "id" }).select("id,pay_day").single(),
+    "No se pudo guardar la cuenta.",
+  );
 
   if (error) throw error;
   if (Number(data?.pay_day) !== Number(dbAccount.pay_day)) {
@@ -302,17 +390,20 @@ async function upsertAccount(account) {
 }
 
 async function upsertPerson(person) {
-  const { error } = await db.from("people").upsert(toDbPerson(person), { onConflict: "id" });
+  const { error } = await runDbQuery(
+    () => db.from("people").upsert(toDbPerson(person), { onConflict: "id" }),
+    "No se pudo guardar la persona.",
+  );
   if (error) throw error;
 }
 
 async function deleteAccountRecord(id) {
-  const { error } = await db.from("accounts").delete().eq("id", id);
+  const { error } = await runDbQuery(() => db.from("accounts").delete().eq("id", id), "No se pudo eliminar la cuenta.");
   if (error) throw error;
 }
 
 async function deletePersonRecord(id) {
-  const { error } = await db.from("people").delete().eq("id", id);
+  const { error } = await runDbQuery(() => db.from("people").delete().eq("id", id), "No se pudo eliminar la persona.");
   if (error) throw error;
 }
 
@@ -381,7 +472,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=8").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=9").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
