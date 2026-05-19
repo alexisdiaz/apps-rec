@@ -5,6 +5,7 @@ create table if not exists public.accounts (
   country text,
   cost numeric(10, 2) not null default 0,
   profile_price numeric(10, 2) not null default 0,
+  profile_names text[] not null default '{}',
   pay_day integer not null default 1 check (pay_day between 1 and 31),
   created_at timestamptz not null default now()
 );
@@ -18,6 +19,9 @@ add column if not exists pay_day integer not null default 1 check (pay_day betwe
 alter table public.accounts
 add column if not exists profile_price numeric(10, 2) not null default 0;
 
+alter table public.accounts
+add column if not exists profile_names text[] not null default '{}';
+
 notify pgrst, 'reload schema';
 
 create table if not exists public.people (
@@ -26,6 +30,7 @@ create table if not exists public.people (
   phone text,
   account_id uuid not null references public.accounts(id) on delete restrict,
   account_ids uuid[] not null default '{}',
+  account_profiles jsonb not null default '{}',
   recommended_by text,
   pay_day integer not null check (pay_day between 1 and 31),
   amount numeric(10, 2) not null default 0,
@@ -46,6 +51,9 @@ add column if not exists account_ids uuid[] not null default '{}';
 
 alter table public.people
 add column if not exists discount numeric(10, 2) not null default 0;
+
+alter table public.people
+add column if not exists account_profiles jsonb not null default '{}';
 
 update public.people
 set account_ids = array[account_id]

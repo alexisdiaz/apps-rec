@@ -142,6 +142,10 @@
               Dia de pago
               <input id="accountPayDay" required type="number" min="1" max="31" value="1" />
             </label>
+            <label class="wide-field">
+              Usuarios/perfiles
+              <textarea id="accountProfileNames" rows="3" placeholder="Un nombre por linea"></textarea>
+            </label>
             <button class="primary-btn" type="submit">Guardar cuenta</button>
           </form>
           <div class="account-list" id="accountList"></div>
@@ -216,7 +220,7 @@
     </dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js?v=6"></script>
-    <script src="app.js?v=6"></script>
+    <script src="supabase-config.js?v=7"></script>
+    <script src="app.js?v=7"></script>
   </body>
 </html>

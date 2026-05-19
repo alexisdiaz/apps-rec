@@ -72,6 +72,7 @@ els.accountForm.addEventListener("submit", async (event) => {
     cost: Number(document.querySelector("#accountCost").value || 0),
     profilePrice: Number(document.querySelector("#accountProfilePrice").value || 0),
     payDay: clampPayDay(Number(document.querySelector("#accountPayDay").value)),
+    profileNames: parseProfileNames(document.querySelector("#accountProfileNames").value),
   };
 
   setFormBusy(els.accountForm, true);
@@ -102,6 +103,7 @@ els.personForm.addEventListener("submit", async (event) => {
   const id = document.querySelector("#personId").value || crypto.randomUUID();
   const existing = state.people.find((person) => person.id === id);
   const accountIds = getSelectedPersonAccountIds();
+  const accountProfiles = getSelectedPersonProfiles();
   if (!accountIds.length) {
     setPersonMessage("Selecciona al menos una cuenta.");
     els.personSubmitButton.disabled = false;
@@ -114,6 +116,7 @@ els.personForm.addEventListener("submit", async (event) => {
     phone: normalizePhone(document.querySelector("#personPhone").value),
     accountId: accountIds[0],
     accountIds,
+    accountProfiles,
     recommendedBy: document.querySelector("#personRecommendedBy").value.trim(),
     payDay: clampPayDay(Number(document.querySelector("#personPayDay").value)),
     amount: Number(document.querySelector("#personAmount").value || 0),
@@ -321,6 +324,7 @@ function toDbAccount(account) {
     country: account.country,
     cost: account.cost,
     profile_price: account.profilePrice,
+    profile_names: account.profileNames || [],
     pay_day: account.payDay,
   };
 }
@@ -333,6 +337,7 @@ function fromDbAccount(account) {
     country: account.country || "",
     cost: Number(account.cost || 0),
     profilePrice: Number(account.profile_price || 0),
+    profileNames: Array.isArray(account.profile_names) ? account.profile_names : [],
     payDay: Number(account.pay_day || 1),
   };
 }
@@ -344,6 +349,7 @@ function toDbPerson(person) {
     phone: person.phone,
     account_id: person.accountId,
     account_ids: person.accountIds || [person.accountId],
+    account_profiles: person.accountProfiles || {},
     recommended_by: person.recommendedBy,
     pay_day: person.payDay,
     amount: person.amount,
@@ -362,6 +368,7 @@ function fromDbPerson(person) {
     phone: person.phone || "",
     accountId: accountIds[0] || person.account_id,
     accountIds,
+    accountProfiles: person.account_profiles || {},
     recommendedBy: person.recommended_by || "",
     payDay: Number(person.pay_day || 1),
     amount: Number(person.amount || 0),
@@ -374,7 +381,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=6").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=7").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
@@ -408,10 +415,16 @@ function renderAccountOptions() {
   els.personAccounts.innerHTML = state.accounts
     .map(
       (account) => `
-        <label class="account-option">
-          <input type="checkbox" value="${account.id}" />
-          <span>${escapeHtml(accountLabel(account))}</span>
-        </label>
+        <div class="account-option" data-account-option="${account.id}">
+          <label class="account-option-check">
+            <input type="checkbox" value="${account.id}" />
+            <span>${escapeHtml(accountLabel(account))}</span>
+          </label>
+          <select data-profile-for="${account.id}" disabled>
+            <option value="">Sin perfil asignado</option>
+            ${(account.profileNames || []).map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}
+          </select>
+        </div>
       `,
     )
     .join("");
@@ -423,7 +436,7 @@ function renderPayments() {
   const people = state.people
     .map((person) => ({ ...person, accounts: findAccounts(person.accountIds || person.accountId), status: paymentStatus(person) }))
     .filter((person) => {
-      const accountText = person.accounts.map(accountLabel).join(" ");
+      const accountText = person.accounts.map((account) => accountAssignmentLabel(account, person.accountProfiles)).join(" ");
       const searchable = `${person.name} ${person.phone} ${person.recommendedBy} ${accountText}`.toLowerCase();
       const matchesQuery = !query || searchable.includes(query);
       const matchesStatus = status === "all" || person.status.key === status;
@@ -441,7 +454,7 @@ function renderPayments() {
 function paymentCard(person) {
   const message = buildWhatsappMessage(person);
   const whatsappUrl = person.phone ? `https://wa.me/${person.phone}?text=${encodeURIComponent(message)}` : "";
-  const accountsLabel = accountListLabel(person.accounts);
+  const accountsLabel = accountListLabel(person.accounts, person.accountProfiles);
   return `
     <article class="payment-card">
       <div>
@@ -495,6 +508,7 @@ function accountCard(account) {
           <span>Pais: ${escapeHtml(account.country || "Sin dato")}</span>
           <span>Costo mensual: ${currency(account.cost)}</span>
           <span>Precio por perfil: ${currency(account.profilePrice)}</span>
+          <span>Usuarios: ${escapeHtml((account.profileNames || []).join(", ") || "Sin dato")}</span>
           <span>Dia de pago: ${account.payDay || 1}</span>
           <span>Proximo pago: ${formatDate(nextPayment)}</span>
           <span>Personas asignadas: ${members}</span>
@@ -518,7 +532,7 @@ function renderPeople() {
 
 function personCard(person) {
   const accounts = findAccounts(person.accountIds || person.accountId);
-  const accountsLabel = accountListLabel(accounts);
+  const accountsLabel = accountListLabel(accounts, person.accountProfiles);
   const status = paymentStatus(person);
   return `
     <article class="person-card">
@@ -585,6 +599,7 @@ function editAccount(id) {
   document.querySelector("#accountCost").value = account.cost;
   document.querySelector("#accountProfilePrice").value = account.profilePrice || "";
   document.querySelector("#accountPayDay").value = account.payDay || 1;
+  document.querySelector("#accountProfileNames").value = (account.profileNames || []).join("\n");
 }
 
 async function deleteAccount(id) {
@@ -620,7 +635,7 @@ function openPersonModal(id) {
   document.querySelector("#personId").value = person?.id || "";
   document.querySelector("#personName").value = person?.name || "";
   document.querySelector("#personPhone").value = person?.phone || "";
-  setSelectedPersonAccounts(person?.accountIds || (person?.accountId ? [person.accountId] : [state.accounts[0].id]));
+  setSelectedPersonAccounts(person?.accountIds || (person?.accountId ? [person.accountId] : [state.accounts[0].id]), person?.accountProfiles || {});
   document.querySelector("#personRecommendedBy").value = person?.recommendedBy || "";
   document.querySelector("#personPayDay").value = person?.payDay || 1;
   document.querySelector("#personAmount").value = person?.amount || "";
@@ -759,7 +774,7 @@ function dateToInputValue(date) {
 function buildWhatsappMessage(person) {
   const accounts = findAccounts(person.accountIds || person.accountId);
   const due = formatDate(paymentStatus(person).nextDate);
-  return `Hola ${person.name}, te recuerdo el pago de ${accountListLabel(accounts)} por ${currency(person.amount)}. Fecha de pago: ${due}. Gracias.`;
+  return `Hola ${person.name}, te recuerdo el pago de ${accountListLabel(accounts, person.accountProfiles)} por ${currency(person.amount)}. Fecha de pago: ${due}. Gracias.`;
 }
 
 function normalizePhone(value) {
@@ -792,14 +807,28 @@ function getSelectedPersonAccountIds() {
   return Array.from(els.personAccounts.querySelectorAll("input[type='checkbox']:checked")).map((input) => input.value);
 }
 
-function setSelectedPersonAccounts(ids) {
+function getSelectedPersonProfiles() {
+  return getSelectedPersonAccountIds().reduce((profiles, accountId) => {
+    const profile = getProfileSelect(accountId)?.value || "";
+    if (profile) profiles[accountId] = profile;
+    return profiles;
+  }, {});
+}
+
+function setSelectedPersonAccounts(ids, profiles = {}) {
   const selected = new Set(normalizeAccountIds(ids));
   els.personAccounts.querySelectorAll("input[type='checkbox']").forEach((input) => {
     input.checked = selected.has(input.value);
+    const select = getProfileSelect(input.value);
+    if (select) {
+      select.disabled = !input.checked;
+      select.value = profiles[input.value] || "";
+    }
   });
 }
 
 function updatePersonAmountFromSelection() {
+  syncAccountProfileControls();
   const selectedAccounts = findAccounts(getSelectedPersonAccountIds()).filter((account) => account.service !== "Sin cuenta");
   const subtotal = selectedAccounts.reduce((sum, account) => sum + Number(account.profilePrice || 0), 0);
   const discount = Number(document.querySelector("#personDiscount").value || 0);
@@ -816,8 +845,32 @@ function accountLabel(account) {
   return `${account.service} - ${account.name}`;
 }
 
-function accountListLabel(accounts) {
-  return accounts.map(accountLabel).join(", ");
+function accountAssignmentLabel(account, profiles = {}) {
+  const profile = profiles?.[account.id];
+  return profile ? `${accountLabel(account)} (${profile})` : accountLabel(account);
+}
+
+function accountListLabel(accounts, profiles = {}) {
+  return accounts.map((account) => accountAssignmentLabel(account, profiles)).join(", ");
+}
+
+function parseProfileNames(value) {
+  return value
+    .split(/\r?\n/)
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function syncAccountProfileControls() {
+  els.personAccounts.querySelectorAll("[data-account-option]").forEach((option) => {
+    const checkbox = option.querySelector("input[type='checkbox']");
+    const select = option.querySelector("select");
+    if (select) select.disabled = !checkbox.checked;
+  });
+}
+
+function getProfileSelect(accountId) {
+  return Array.from(els.personAccounts.querySelectorAll("[data-profile-for]")).find((select) => select.dataset.profileFor === accountId);
 }
 
 function setPersonMessage(message) {
