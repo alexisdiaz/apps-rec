@@ -152,6 +152,10 @@ button {
   width: 100%;
 }
 
+.report-btn {
+  width: 100%;
+}
+
 .summary-label {
   display: block;
   font-size: 0.78rem;

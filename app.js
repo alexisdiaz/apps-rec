@@ -46,6 +46,7 @@ const els = {
   authEmailDisplay: document.querySelector("#authEmailDisplay"),
   logoutButton: document.querySelector("#logoutButton"),
   signupButton: document.querySelector("#signupButton"),
+  reportButton: document.querySelector("#reportButton"),
 };
 
 document.querySelector("#openPersonModal").addEventListener("click", () => openPersonModal());
@@ -58,6 +59,7 @@ document.querySelector("#personDiscount").addEventListener("input", updatePerson
 els.loginForm.addEventListener("submit", signIn);
 els.signupButton.addEventListener("click", signUp);
 els.logoutButton.addEventListener("click", signOut);
+els.reportButton.addEventListener("click", generatePdfReport);
 
 els.navTabs.forEach((tab) => {
   tab.addEventListener("click", () => setView(tab.dataset.view));
@@ -473,7 +475,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=10").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=11").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
@@ -880,10 +882,114 @@ function dateToInputValue(date) {
   return `${year}-${month}-${day}`;
 }
 
+function generatePdfReport() {
+  const linkedRows = [];
+  const unlinkedRows = [];
+
+  state.accounts.forEach((account) => {
+    const profileNames = account.profileNames || [];
+
+    if (!profileNames.length) {
+      const assignedPeople = peopleUsingAccount(account.id);
+      const row = {
+        account: accountLabel(account),
+        profile: "Sin perfiles registrados",
+        people: assignedPeople.length ? assignedPeople.map((person) => person.name).join(", ") : "Sin personas",
+      };
+      if (assignedPeople.length) linkedRows.push(row);
+      else unlinkedRows.push(row);
+      return;
+    }
+
+    profileNames.forEach((profileName) => {
+      const linkedPeople = state.people.filter((person) =>
+        normalizeProfileSelection(person.accountProfiles?.[account.id]).includes(profileName),
+      );
+      const row = {
+        account: accountLabel(account),
+        profile: profileName,
+        people: linkedPeople.map((person) => person.name).join(", "),
+      };
+
+      if (linkedPeople.length) linkedRows.push(row);
+      else unlinkedRows.push(row);
+    });
+  });
+
+  const reportWindow = window.open("", "_blank");
+  if (!reportWindow) {
+    alert("El navegador bloqueó la ventana del reporte. Permite ventanas emergentes para generar el PDF.");
+    return;
+  }
+
+  const generatedAt = new Intl.DateTimeFormat("es-SV", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
+  reportWindow.document.write(`
+    <!doctype html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <title>Reporte de cuentas y perfiles</title>
+        <style>
+          body { color: #17201d; font-family: Arial, sans-serif; margin: 32px; }
+          h1 { margin: 0 0 6px; font-size: 24px; }
+          h2 { margin: 28px 0 10px; font-size: 18px; }
+          p { color: #68736f; margin: 0 0 18px; }
+          table { border-collapse: collapse; margin-bottom: 20px; width: 100%; }
+          th, td { border: 1px solid #dfe7e1; padding: 9px; text-align: left; vertical-align: top; }
+          th { background: #edf2ef; }
+          .empty { color: #68736f; padding: 12px 0; }
+          @media print { body { margin: 18mm; } button { display: none; } }
+        </style>
+      </head>
+      <body>
+        <h1>Reporte de cuentas y perfiles</h1>
+        <p>Generado: ${escapeHtml(generatedAt)}</p>
+        ${reportTable("Perfiles vinculados", linkedRows, "No hay perfiles vinculados.")}
+        ${reportTable("Perfiles no vinculados", unlinkedRows, "Todos los perfiles registrados están vinculados.")}
+        <script>window.addEventListener("load", () => setTimeout(() => window.print(), 300));</script>
+      </body>
+    </html>
+  `);
+  reportWindow.document.close();
+}
+
+function reportTable(title, rows, emptyText) {
+  if (!rows.length) return `<h2>${escapeHtml(title)}</h2><div class="empty">${escapeHtml(emptyText)}</div>`;
+  return `
+    <h2>${escapeHtml(title)}</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Cuenta</th>
+          <th>Perfil</th>
+          <th>Vinculado a</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map(
+            (row) => `
+              <tr>
+                <td>${escapeHtml(row.account)}</td>
+                <td>${escapeHtml(row.profile)}</td>
+                <td>${escapeHtml(row.people || "Sin personas")}</td>
+              </tr>
+            `,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function peopleUsingAccount(accountId) {
+  return state.people.filter((person) => normalizeAccountIds(person.accountIds, person.accountId).includes(accountId));
+}
+
 function buildWhatsappMessage(person) {
   const accounts = findAccounts(person.accountIds || person.accountId);
   const due = formatDate(paymentStatus(person).nextDate);
-  return `Hola ${person.name}, te recuerdo el pago de ${accountListLabel(accounts, person.accountProfiles)} por ${currency(person.amount)}. Fecha de pago: ${due}. Gracias.`;
+  return `Hola ${person.name}, te recuerdo el pago de ${reminderAccountListLabel(accounts, person.accountProfiles)} por ${currency(person.amount)}. Fecha de pago: ${due}. Gracias.`;
 }
 
 function normalizePhone(value) {
@@ -958,6 +1064,15 @@ function accountAssignmentLabel(account, profiles = {}) {
 
 function accountListLabel(accounts, profiles = {}) {
   return accounts.map((account) => accountAssignmentLabel(account, profiles)).join(", ");
+}
+
+function reminderAccountListLabel(accounts, profiles = {}) {
+  return accounts.map((account) => reminderAccountLabel(account, profiles)).join(", ");
+}
+
+function reminderAccountLabel(account, profiles = {}) {
+  const selectedProfiles = normalizeProfileSelection(profiles?.[account.id]);
+  return selectedProfiles.length ? `${account.service} (${selectedProfiles.join(", ")})` : account.service;
 }
 
 function parseProfileNames(value) {
