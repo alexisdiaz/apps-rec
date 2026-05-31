@@ -475,7 +475,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=12").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=13").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
@@ -559,12 +559,13 @@ function renderPayments() {
     ? people.map(paymentCard).join("")
     : `<div class="empty">Aún no hay pagos para mostrar. Agrega una persona para comenzar.</div>`;
 
+  bindWhatsappLinks(els.paymentList);
   bindPersonActions(els.paymentList);
 }
 
 function paymentCard(person) {
   const message = buildWhatsappMessage(person);
-  const whatsappUrl = person.phone ? `https://wa.me/${person.phone}?text=${encodeURIComponent(message)}` : "";
+  const whatsappUrl = person.phone ? `https://web.whatsapp.com/send?phone=${person.phone}&text=${encodeURIComponent(message)}` : "";
   const accountsLabel = accountListLabel(person.accounts, person.accountProfiles);
   return `
     <article class="payment-card">
@@ -583,7 +584,7 @@ function paymentCard(person) {
         </div>
       </div>
       <div class="card-actions">
-        ${person.phone ? `<a class="whatsapp-btn" href="${whatsappUrl}" target="whatsapp_reminder" rel="noreferrer">WhatsApp</a>` : ""}
+        ${person.phone ? `<a class="whatsapp-btn" href="${whatsappUrl}" data-whatsapp-url="${whatsappUrl}" target="whatsapp_reminder">WhatsApp</a>` : ""}
         <button class="success-btn" type="button" data-confirm-payment="${person.id}">Confirmar pago</button>
         <button class="secondary-btn" type="button" data-edit-person="${person.id}">Editar</button>
         <button class="danger-btn" type="button" data-delete-person="${person.id}">Eliminar</button>
@@ -639,6 +640,17 @@ function renderPeople() {
     : `<div class="empty">No hay personas registradas todavía.</div>`;
 
   bindPersonActions(els.peopleList);
+}
+
+function bindWhatsappLinks(container) {
+  container.querySelectorAll("[data-whatsapp-url]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      const whatsappWindow = window.open(link.dataset.whatsappUrl, "whatsapp_reminder");
+      if (whatsappWindow) whatsappWindow.focus();
+      else window.location.href = link.dataset.whatsappUrl;
+    });
+  });
 }
 
 function personCard(person) {
