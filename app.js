@@ -475,7 +475,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=11").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=12").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
@@ -583,7 +583,7 @@ function paymentCard(person) {
         </div>
       </div>
       <div class="card-actions">
-        ${person.phone ? `<a class="whatsapp-btn" href="${whatsappUrl}" target="_blank" rel="noreferrer">WhatsApp</a>` : ""}
+        ${person.phone ? `<a class="whatsapp-btn" href="${whatsappUrl}" target="whatsapp_reminder" rel="noreferrer">WhatsApp</a>` : ""}
         <button class="success-btn" type="button" data-confirm-payment="${person.id}">Confirmar pago</button>
         <button class="secondary-btn" type="button" data-edit-person="${person.id}">Editar</button>
         <button class="danger-btn" type="button" data-delete-person="${person.id}">Eliminar</button>
@@ -989,7 +989,7 @@ function peopleUsingAccount(accountId) {
 function buildWhatsappMessage(person) {
   const accounts = findAccounts(person.accountIds || person.accountId);
   const due = formatDate(paymentStatus(person).nextDate);
-  return `Hola ${person.name}, te recuerdo el pago de ${reminderAccountListLabel(accounts, person.accountProfiles)} por ${currency(person.amount)}. Fecha de pago: ${due}. Gracias.`;
+  return `te recuerdo el pago de ${reminderAccountListLabel(accounts, person.accountProfiles)} por ${currency(person.amount)}. Fecha de pago: ${due}. Gracias.`;
 }
 
 function normalizePhone(value) {

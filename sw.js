@@ -1,10 +1,10 @@
-const CACHE_NAME = "control-apps-v11";
+const CACHE_NAME = "control-apps-v12";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app.js?v=11",
-  "./supabase-config.js?v=11",
+  "./app.js?v=12",
+  "./supabase-config.js?v=12",
   "./manifest.webmanifest",
   "./icon.svg",
 ];
