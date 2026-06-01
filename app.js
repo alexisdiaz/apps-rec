@@ -78,6 +78,8 @@ els.accountForm.addEventListener("submit", async (event) => {
     profilePrice: Number(document.querySelector("#accountProfilePrice").value || 0),
     payDay: clampPayDay(Number(document.querySelector("#accountPayDay").value)),
     profileNames: parseProfileNames(document.querySelector("#accountProfileNames").value),
+    addresses: parseProfileNames(document.querySelector("#accountAddresses").value),
+    familyLink: document.querySelector("#accountFamilyLink").value.trim(),
   };
 
   setFormBusy(els.accountForm, true);
@@ -419,6 +421,8 @@ function toDbAccount(account) {
     cost: account.cost,
     profile_price: account.profilePrice,
     profile_names: account.profileNames || [],
+    addresses: account.addresses || [],
+    family_link: account.familyLink || "",
     pay_day: account.payDay,
   };
 }
@@ -432,6 +436,8 @@ function fromDbAccount(account) {
     cost: Number(account.cost || 0),
     profilePrice: Number(account.profile_price || 0),
     profileNames: Array.isArray(account.profile_names) ? account.profile_names : [],
+    addresses: Array.isArray(account.addresses) ? account.addresses : [],
+    familyLink: account.family_link || "",
     payDay: Number(account.pay_day || 1),
   };
 }
@@ -475,7 +481,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=13").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=15").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
@@ -621,6 +627,9 @@ function accountCard(account) {
           <span>Costo mensual: ${currency(account.cost)}</span>
           <span>Precio por perfil: ${currency(account.profilePrice)}</span>
           <span>Usuarios: ${escapeHtml((account.profileNames || []).join(", ") || "Sin dato")}</span>
+          <span>Direcciones: ${escapeHtml((account.addresses || []).join(", ") || "Sin dato")}</span>
+          ${account.familyLink ? `<a href="${escapeHtml(account.familyLink)}" target="_blank" rel="noreferrer">Link grupo familiar</a>` : ""}
+          <span>Perfiles registrados: ${(account.profileNames || []).length}</span>
           <span>Dia de pago: ${account.payDay || 1}</span>
           <span>Proximo pago: ${formatDate(nextPayment)}</span>
           <span>Personas asignadas: ${members}</span>
@@ -723,6 +732,8 @@ function editAccount(id) {
   document.querySelector("#accountProfilePrice").value = account.profilePrice || "";
   document.querySelector("#accountPayDay").value = account.payDay || 1;
   document.querySelector("#accountProfileNames").value = (account.profileNames || []).join("\n");
+  document.querySelector("#accountAddresses").value = (account.addresses || []).join("\n");
+  document.querySelector("#accountFamilyLink").value = account.familyLink || "";
 }
 
 async function deleteAccount(id) {
@@ -758,7 +769,7 @@ function openPersonModal(id) {
   document.querySelector("#personId").value = person?.id || "";
   document.querySelector("#personName").value = person?.name || "";
   document.querySelector("#personPhone").value = person?.phone || "";
-  setSelectedPersonAccounts(person?.accountIds || (person?.accountId ? [person.accountId] : [state.accounts[0].id]), person?.accountProfiles || {});
+  setSelectedPersonAccounts(person ? person.accountIds || (person.accountId ? [person.accountId] : []) : [], person?.accountProfiles || {});
   document.querySelector("#personRecommendedBy").value = person?.recommendedBy || "";
   document.querySelector("#personPayDay").value = person?.payDay || 1;
   document.querySelector("#personAmount").value = person?.amount || "";

@@ -6,6 +6,8 @@ create table if not exists public.accounts (
   cost numeric(10, 2) not null default 0,
   profile_price numeric(10, 2) not null default 0,
   profile_names text[] not null default '{}',
+  addresses text[] not null default '{}',
+  family_link text,
   pay_day integer not null default 1 check (pay_day between 1 and 31),
   created_at timestamptz not null default now()
 );
@@ -21,6 +23,12 @@ add column if not exists profile_price numeric(10, 2) not null default 0;
 
 alter table public.accounts
 add column if not exists profile_names text[] not null default '{}';
+
+alter table public.accounts
+add column if not exists addresses text[] not null default '{}';
+
+alter table public.accounts
+add column if not exists family_link text;
 
 notify pgrst, 'reload schema';
 

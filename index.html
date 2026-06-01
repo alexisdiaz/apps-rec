@@ -152,6 +152,14 @@
               Usuarios/perfiles
               <textarea id="accountProfileNames" rows="3" placeholder="Un nombre por linea"></textarea>
             </label>
+            <label class="wide-field">
+              Direcciones registradas
+              <textarea id="accountAddresses" rows="3" placeholder="Una direccion por linea"></textarea>
+            </label>
+            <label class="wide-field">
+              Link grupo familiar
+              <input id="accountFamilyLink" type="url" placeholder="https://..." />
+            </label>
             <button class="primary-btn" type="submit">Guardar cuenta</button>
           </form>
           <div class="account-list" id="accountList"></div>
@@ -226,7 +234,7 @@
     </dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js?v=13"></script>
-    <script src="app.js?v=13"></script>
+    <script src="supabase-config.js?v=15"></script>
+    <script src="app.js?v=15"></script>
   </body>
 </html>
