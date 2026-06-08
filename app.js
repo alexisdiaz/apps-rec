@@ -45,6 +45,8 @@ const els = {
   authPanel: document.querySelector("#authPanel"),
   authEmailDisplay: document.querySelector("#authEmailDisplay"),
   logoutButton: document.querySelector("#logoutButton"),
+  resetSessionButton: document.querySelector("#resetSessionButton"),
+  resetLoginButton: document.querySelector("#resetLoginButton"),
   signupButton: document.querySelector("#signupButton"),
   reportButton: document.querySelector("#reportButton"),
 };
@@ -59,6 +61,8 @@ document.querySelector("#personDiscount").addEventListener("input", updatePerson
 els.loginForm.addEventListener("submit", signIn);
 els.signupButton.addEventListener("click", signUp);
 els.logoutButton.addEventListener("click", signOut);
+els.resetSessionButton.addEventListener("click", resetSession);
+els.resetLoginButton.addEventListener("click", resetSession);
 els.reportButton.addEventListener("click", generatePdfReport);
 
 els.navTabs.forEach((tab) => {
@@ -156,18 +160,28 @@ init();
 async function init() {
   db = createDatabaseClient();
   if (db) {
-    const { data } = await withTimeout(db.auth.getSession(), "No se pudo verificar la sesion.");
-    authUser = data.session?.user || null;
-    isMember = authUser ? await checkMembership() : false;
+    try {
+      const { data, error } = await withTimeout(db.auth.getSession(), "No se pudo verificar la sesion.");
+      if (error) throw error;
+      authUser = data.session?.user || null;
+      isMember = authUser ? await checkMembership() : false;
+    } catch (error) {
+      console.warn("No se pudo verificar la sesion inicial.", error);
+      authUser = null;
+      isMember = false;
+      setAuthMessage(`No se pudo verificar la sesion: ${getErrorMessage(error)} Usa "Limpiar sesion" y vuelve a entrar.`);
+    }
 
     db.auth.onAuthStateChange(async (_event, session) => {
       authUser = session?.user || null;
-      isMember = authUser ? await checkMembership() : false;
       try {
+        isMember = authUser ? await checkMembership() : false;
         state = authUser && isMember ? await loadState() : { accounts: [], people: [] };
       } catch (error) {
         console.warn("No se pudieron actualizar los datos despues del cambio de sesion.", error);
-        alert(`No se pudieron actualizar los datos: ${getErrorMessage(error)}`);
+        isMember = false;
+        state = { accounts: [], people: [] };
+        setAuthMessage(`No se pudieron actualizar los datos: ${getErrorMessage(error)} Usa "Limpiar sesion" si la pagina queda trabada.`);
       }
       renderAuth();
       render();
@@ -178,6 +192,8 @@ async function init() {
     state = await loadState();
   } catch (error) {
     console.warn("No se pudieron cargar los datos iniciales.", error);
+    state = { accounts: [], people: [] };
+    setAuthMessage(`No se pudieron cargar los datos: ${getErrorMessage(error)} Usa "Limpiar sesion" para volver a entrar.`);
     alert(`No se pudieron cargar los datos: ${getErrorMessage(error)}`);
   }
   renderAuth();
@@ -270,7 +286,89 @@ async function signUp() {
 }
 
 async function signOut() {
-  await withTimeout(db.auth.signOut(), "No se pudo cerrar sesion.");
+  setAuthMessage("Cerrando sesion...");
+  try {
+    if (db) await withTimeout(db.auth.signOut({ scope: "local" }), "No se pudo cerrar sesion.");
+  } catch (error) {
+    console.warn("No se pudo cerrar sesion desde Supabase.", error);
+  }
+
+  clearSessionStorage(window.localStorage);
+  clearSessionStorage(window.sessionStorage);
+  clearSameOriginCookies();
+  authUser = null;
+  isMember = false;
+  state = { accounts: [], people: [] };
+  renderAuth();
+  render();
+}
+
+async function resetSession(options = {}) {
+  if (!options.skipConfirm) {
+    const accepted = window.confirm("Esto cerrara la sesion y limpiara los datos guardados por esta web en este navegador. Luego podras entrar otra vez.");
+    if (!accepted) return;
+  }
+
+  setAuthMessage("Limpiando sesion local...");
+
+  try {
+    if (db) await withTimeout(db.auth.signOut({ scope: "local" }), "No se pudo cerrar sesion local.");
+  } catch (error) {
+    console.warn("No se pudo cerrar la sesion local de Supabase.", error);
+  }
+
+  clearSessionStorage(window.localStorage);
+  clearSessionStorage(window.sessionStorage);
+  clearSameOriginCookies();
+
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+  } catch (error) {
+    console.warn("No se pudo limpiar la cache de la app.", error);
+  }
+
+  try {
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+  } catch (error) {
+    console.warn("No se pudo desregistrar el modo instalable.", error);
+  }
+
+  authUser = null;
+  isMember = false;
+  state = { accounts: [], people: [] };
+
+  const cleanUrl = `${window.location.origin}${window.location.pathname}?reset=${Date.now()}`;
+  window.location.replace(cleanUrl);
+}
+
+function clearSessionStorage(storage) {
+  if (!storage) return;
+  const keys = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (key) keys.push(key);
+  }
+
+  keys.forEach((key) => {
+    const normalized = key.toLowerCase();
+    if (key === STORAGE_KEY || key.startsWith("sb-") || normalized.includes("supabase")) {
+      storage.removeItem(key);
+    }
+  });
+}
+
+function clearSameOriginCookies() {
+  document.cookie.split(";").forEach((cookie) => {
+    const name = cookie.split("=")[0].trim();
+    if (!name) return;
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+  });
 }
 
 async function checkMembership(options = {}) {
@@ -481,7 +579,7 @@ function fromDbPerson(person) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js?v=15").catch((error) => {
+  navigator.serviceWorker.register("sw.js?v=16").catch((error) => {
     console.warn("No se pudo registrar el modo instalable.", error);
   });
 }
